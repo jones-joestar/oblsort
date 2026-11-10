@@ -39,9 +39,9 @@ RUN unzip 'scc-3.0.0-x86_64-unknown-linux.zip' -d /
 RUN chmod +x /scc
 
 RUN mkdir /dockerfiles
-RUN cd /dockerfiles && wget https://download.01.org/intel-sgx/latest/linux-latest/distro/ubuntu22.04-server/sgx_linux_x64_sdk_2.19.100.3.bin \
+RUN cd /dockerfiles && wget https://download.01.org/intel-sgx/latest/linux-latest/distro/ubuntu22.04-server/sgx_linux_x64_sdk_2.30.101.1.bin \
 && chmod +x ./* \
-&& echo yes | ./sgx_linux_x64_sdk_2.19.100.3.bin
+&& echo yes | ./sgx_linux_x64_sdk_2.30.101.1.bin
 RUN echo "source /dockerfiles/sgxsdk/environment" > /startsgxenv.sh
 RUN chmod +x /startsgxenv.sh
 
