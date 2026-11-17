@@ -71,4 +71,4 @@ done
 done
 done
 done
-sed -i '/.*<Heap.*/c\  <HeapMaxSize>0x7A00000</HeapMaxSize>' ./Enclave/Enclave.config.xml
+sed -i '/.*<Heap.*/c\  <HeapMaxSize>0x7a12000</HeapMaxSize>' ./Enclave/Enclave.config.xml
