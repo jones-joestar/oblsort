@@ -262,7 +262,7 @@ endif
 
 ######## App Objects ########
 
-App/Enclave_u.h: $(SGX_EDGER8R) Enclave/Enclave.edl
+App/Enclave_u.h: $(SGX_EDGER8R) Enclave/Enclave.edl Enclave/TrustedLibrary/sorting.edl
 	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include
 	@echo "GEN  =>  $@"
 
@@ -282,7 +282,7 @@ $(App_Name): App/Enclave_u.o $(App_Cpp_Objects)
 
 ######## Enclave Objects ########
 
-Enclave/Enclave_t.h: $(SGX_EDGER8R) Enclave/Enclave.edl
+Enclave/Enclave_t.h: $(SGX_EDGER8R) Enclave/Enclave.edl Enclave/TrustedLibrary/sorting.edl
 	@cd Enclave && $(SGX_EDGER8R) --trusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include
 	@echo "GEN  =>  $@"
 
@@ -305,7 +305,7 @@ $(Enclave_Name): Enclave/Enclave_t.o $(Enclave_Cpp_Objects) $(Enclave_C_Objects)
 	@$(CXX) $^ -o $@ $(Enclave_Link_Flags)
 	@echo "LINK =>  $@"
 
-$(Signed_Enclave_Name): $(Enclave_Name)
+$(Signed_Enclave_Name): $(Enclave_Name) $(Enclave_Config_File)
 ifeq ($(wildcard $(Enclave_Test_Key)),)
 	@echo "There is no enclave test key<Enclave_private_test.pem>."
 	@echo "The project will generate a key<Enclave_private_test.pem> for test."

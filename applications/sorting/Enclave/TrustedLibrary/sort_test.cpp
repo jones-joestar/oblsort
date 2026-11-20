@@ -1,3 +1,5 @@
+#include <random>
+
 #include "../Enclave.h"
 #include "Enclave_t.h"
 #include "external_memory/algorithm/ca_bucket_sort.hpp"
@@ -15,14 +17,16 @@
 #ifndef STEP_RATIO
 #define STEP_RATIO 1.2
 #endif
+#define SORT_ALGO_NAME_IMPL(value) #value
+#define SORT_ALGO_NAME(value) SORT_ALGO_NAME_IMPL(value)
 
 using namespace EM::Algorithm;
 using namespace EM::NonCachedVector;
 EM::Backend::MemServerBackend* EM::Backend::g_DefaultBackend = nullptr;
 
 void ecall_sort_perf() {
-  // printf("ecall_sort_perf called\n");
-  dbg_printf("run in debug mode\n");
+  static_assert(MIN_SIZE > 0 && MAX_SIZE >= MIN_SIZE);
+  static_assert(STEP_RATIO > 1);
   // using TestVector = EM::ExtVector::Vector<SortElement, 4032, true, 28000>;
   constexpr bool NeedCache = ALGO == ORSHUFFLE || ALGO == BITONICSORT ||
                              ALGO == UNOPTBITONICSORT || ALGO == BITONICSHUFFLE;
@@ -45,8 +49,9 @@ void ecall_sort_perf() {
                                              true, true, CacheSize>;
   using TestVector = std::conditional<NeedCache, CachedVector,
                                       Vector<SortElement, CachePageSize>>::type;
-  for (double factor = 1; factor <= MAX_SIZE / MIN_SIZE; factor *= STEP_RATIO) {
+  for (double factor = 1; factor * MIN_SIZE <= MAX_SIZE; factor *= STEP_RATIO) {
     uint64_t size = (uint64_t)(factor * MIN_SIZE);
+    ocall_log_sort_start(SORT_ALGO_NAME(ALGO), size, ELEMENT_SIZE);
     if (EM::Backend::g_DefaultBackend) {
       delete EM::Backend::g_DefaultBackend;
     }
@@ -57,9 +62,11 @@ void ecall_sort_perf() {
         new EM::Backend::MemServerBackend(BackendSize);
     TestVector vExt(size);
     TestVector::Writer writer(vExt.begin(), vExt.end());
+    // Recreate the same input for this size without seeding the sort's RNG.
+    std::mt19937_64 input_keys(size);
     for (uint64_t i = 0; i < size; ++i) {
       SortElement element = SortElement();
-      element.key = UniformRandom();
+      element.key = input_keys();
       writer.write(element);
     }
     writer.flush();
@@ -90,11 +97,10 @@ void ecall_sort_perf() {
     uint64_t currTime2;
     ocall_measure_time(&currTime2);
     uint64_t timediff = currTime2 - currTime;
-    printf("%ld\t%ld\t%d.%d\n", size, ELEMENT_SIZE, timediff / 1'000'000'000,
-           timediff % 1'000'000'000);
-    if (timediff / 1'000'000'000 > 1800) {
-      break;
-    }
+    printf("%llu\t%u\t%llu.%09llu\n", static_cast<unsigned long long>(size),
+           static_cast<unsigned>(ELEMENT_SIZE),
+           static_cast<unsigned long long>(timediff / 1'000'000'000),
+           static_cast<unsigned long long>(timediff % 1'000'000'000));
   }
 }
 

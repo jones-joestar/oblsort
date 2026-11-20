@@ -1,5 +1,13 @@
 #!/bin/bash
-source /startsgxenv.sh
+set -eo pipefail
+
+if [[ -r /startsgxenv.sh ]]; then
+    source /startsgxenv.sh
+fi
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+output_dir=../../benchmark_output
+mkdir -p -- "$output_dir"
 
 SGX_MODE=${SGX_MODE:-HW} # HW or SIM
 
@@ -8,71 +16,61 @@ SGX_MODE=${SGX_MODE:-HW} # HW or SIM
 ALGOs=(KWAYBUTTERFLYOSORT BITONICSORT CABUCKETSORT KWAYBUTTERFLYOSHUFFLE ORSHUFFLE BITONICSHUFFLE CABUCKETSHUFFLE EXTMERGESORT)
 MIN_ELEMENT_SIZE=128 # element size in bytes
 MAX_ELEMENT_SIZE=128
-MIN_SIZE=1000000    # input size in number of elements
-MAX_SIZE=100000000
+MIN_SIZE=${MIN_SIZE:-1000000} # number of elements
+MAX_SIZE=${MAX_SIZE:-100000000}
 STEP_RATIO=${STEP_RATIO:-1.2}
-MIN_ENCLAVE_SIZE=128 # enclave size in MB
+MIN_ENCLAVE_SIZE=128 # MB
 MAX_ENCLAVE_SIZE=128
-IO_ROUNDs=(1) # number of rounds encryption/decryption is performed, used to get breakdown
-CORE_ID=5 # the cpu core id to run the program
-DISK_IO=0 # 0: no disk IO, 1: disk IO
+IO_ROUNDS=(1) # encryption/decryption rounds
+CORE_ID=${CORE_ID:-5}
+DISK_IO=0 # 0: memory backend, 1: disk backend
 
-for IO_ROUND in ${IO_ROUNDs[@]}; do
-if [ $IO_ROUND = 0 ]
-then
-    IO_TAG=_MOCK_IO
-fi
+build_dir=$(mktemp -d)
+trap 'rm -rf -- "$build_dir"' EXIT
+builds=()
 
-if [ $IO_ROUND -gt 1 ]
-then
-    IO_TAG=_${IO_ROUND}IO
-fi
+for io_round in "${IO_ROUNDS[@]}"; do
+    for (( enclave_size=MIN_ENCLAVE_SIZE; enclave_size<=MAX_ENCLAVE_SIZE; enclave_size*=2 )); do
+        printf -v heap_size '%x' "$((enclave_size * 1000000))"
+        enclave_config="$build_dir/Enclave.config.xml"
+        sed "s|<HeapMaxSize>[^<]*</HeapMaxSize>|<HeapMaxSize>0x${heap_size}</HeapMaxSize>|" \
+            Enclave/Enclave.config.xml > "$enclave_config"
 
-if [ $DISK_IO = 1 ]
-then
-    DISK_TAG=_DISK
-fi
+        for (( element_size=MIN_ELEMENT_SIZE; element_size<=MAX_ELEMENT_SIZE; element_size=element_size*3/2 )); do
+            for algo in "${ALGOS[@]}"; do
+                name="${algo}_${SGX_MODE}_${element_size}B_${MIN_SIZE}_${MAX_SIZE}_step${STEP_RATIO}_E${enclave_size}_IO${io_round}_DISK${DISK_IO}"
+                mkdir -- "$build_dir/$name"
+                printf 'Building %s (%s, %s-byte elements, %s MB enclave)\n' \
+                    "$algo" "$SGX_MODE" "$element_size" "$enclave_size" >&2
+                make clean
+                make SGX_MODE="$SGX_MODE" SGX_PRERELEASE=1 ELEMENT_SIZE="$element_size" \
+                    ALGO="$algo" MIN_SIZE="$MIN_SIZE" MAX_SIZE="$MAX_SIZE" STEP_RATIO="$STEP_RATIO" \
+                    IO_ROUND="$io_round" DISK_IO="$DISK_IO" ENCLAVE_SIZE="$enclave_size" \
+                    Enclave_Config_File="$enclave_config"
+                cp -- sort.elf enclave.signed.so "$build_dir/$name/"
+                builds+=("$name")
+            done
+        done
+    done
+done
 
-if [ $MAX_ENCLAVE_SIZE != 128 ]
-then
-    ENCLAVE_SIZE_TAG=_${MIN_ENCLAVE_SIZE}_${MAX_ENCLAVE_SIZE}
-fi
-
-for ALGO in ${ALGOs[@]}; do
-FILENAME=${ALGO}_${MIN_ELEMENT_SIZE}_${MAX_ELEMENT_SIZE}_${MIN_SIZE}_${MAX_SIZE}${IO_TAG}${DISK_TAG}${ENCLAVE_SIZE_TAG}.out
-if [ -z "$1" ]; then
-rm -f $FILENAME
-echo "output to "${FILENAME}
-fi
-for (( encsize=$MIN_ENCLAVE_SIZE; encsize<=$MAX_ENCLAVE_SIZE; encsize*=2 ))
-do
-heapsizeB=$(( encsize * 1000000 ))
-hex_encsize=$(printf '%x\n' $heapsizeB)
-
-sed -i "/.*<Heap.*/c\  <HeapMaxSize>0x"${hex_encsize}"</HeapMaxSize>" ./Enclave/Enclave.config.xml
-for (( s=$MIN_ELEMENT_SIZE; s<=$MAX_ELEMENT_SIZE; s=s*3/2 ))
-do
-    make clean
-    make SGX_MODE=$SGX_MODE SGX_PRERELEASE=1 ELEMENT_SIZE=$s ALGO=$ALGO MIN_SIZE=$MIN_SIZE MAX_SIZE=$MAX_SIZE IO_ROUND=$IO_ROUND DISK_IO=$DISK_IO ENCLAVE_SIZE=$encsize STEP_RATIO=$STEP_RATIO
-    if [[ $1 = 1 ]]; then
-        taskset -c ${CORE_ID} ./sort.elf
-        sleep 1
-    else
-        taskset -c ${CORE_ID} stdbuf -oL nohup ./sort.elf &>> $FILENAME < /dev/null
-        sleep 1
-        last_line=$(tail -n 1 $FILENAME)
-
-        last_token=$(echo -e "$last_line" | cut -f 3)
-
-        # Check if duration is greater than 4000
-        if (( $(echo "$last_token > 4000" | bc -l) )); then
-            break
-        fi
+for (( run=1; run<=6; ++run )); do
+    run_label="run${run}"
+    if (( run == 1 )); then
+        run_label+=_warmup
     fi
-done
-done
-done
-done
-sed -i '/.*<Heap.*/c\  <HeapMaxSize>0x7a12000</HeapMaxSize>' ./Enclave/Enclave.config.xml
 
-mv *.out ../../benchmark_output/
+    shuffled_builds=$(printf '%s\n' "${builds[@]}" | shuf)
+    while IFS= read -r name; do
+        result="$output_dir/${name}_${run_label}.out"
+        printf 'Run %d/6: writing %s\n' "$run" "$result" >&2
+        if [[ ${1:-} == 1 ]]; then
+            (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
+                < /dev/null | tee "$result.part"
+        else
+            (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
+                < /dev/null > "$result.part"
+        fi
+        mv -- "$result.part" "$result"
+    done <<< "$shuffled_builds"
+done
