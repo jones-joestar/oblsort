@@ -61,3 +61,4 @@ Enclave_u.c
 *.pem
 .venv
 applications/sorting/.config_SIM_PRERELEASE_x64
+ignore/*

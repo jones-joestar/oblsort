@@ -51,11 +51,21 @@ cd applications/sorting
 make SGX_MODE=SIM
 ```
 
-## Run a sample script to test runtime of sorting algorithms
+## Benchmark the SGX sorting algorithms
 ```bash
 cd applications/sorting
 ./algo_runner.sh
 ```
+
+The runner builds the configured algorithms once, then runs six sweeps in
+shuffled order. Each algorithm receives the same generated input for a given
+element count in every sweep. Progress is printed to the console, and timings
+are saved to `benchmark_output` at the repository root. Files ending in
+`_run1_warmup.out` record the warm-up. Use runs 2 through 6 for comparisons.
+
+Set `MIN_SIZE`, `MAX_SIZE`, `STEP_RATIO`, or `CORE_ID` in the environment to
+adjust the input sizes or CPU affinity. Pass `1` to also print timing rows to
+the console.
 
 ## Folder structure high level details
 
