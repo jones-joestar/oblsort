@@ -12,6 +12,7 @@ enclave {
   untrusted {
     void ocall_FAIL();
     void ocall_print_string([in, string] const char *str);
+    void ocall_log_sort_start([in, string] const char *algorithm, uint64_t size, uint64_t element_size);
     uint64_t ocall_measure_time();
     uint8_t* ocall_InitServer(uint64_t sizeOfT, uint64_t N_);
     void ocall_DeleteServer();

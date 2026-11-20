@@ -87,6 +87,13 @@ void ocall_print_string(const char *str) {
   printf("%s", str);
 }
 
+void ocall_log_sort_start(const char *algorithm, uint64_t size,
+                            uint64_t element_size) {
+  fprintf(stderr, "  %s: %llu elements (%llu bytes each)\n", algorithm,
+          static_cast<unsigned long long>(size),
+          static_cast<unsigned long long>(element_size));
+}
+
 void ocall_FAIL() {
   printf("Called FAIL oCall\n");
   exit(-1);
@@ -95,10 +102,8 @@ void ocall_FAIL() {
 #include <chrono>
 
 uint64_t ocall_measure_time(void) {
-  // returns linux-epoch-time in nanoseconds.
-  auto now_c = std::chrono::system_clock::now();
-  uint64_t ret = now_c.time_since_epoch().count();
-  return ret;
+  const auto elapsed = std::chrono::steady_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
 }
 
 /* Application entry */
