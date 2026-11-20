@@ -10,6 +10,7 @@ MIN_ELEMENT_SIZE=128 # element size in bytes
 MAX_ELEMENT_SIZE=128
 MIN_SIZE=1000000    # input size in number of elements
 MAX_SIZE=100000000
+STEP_RATIO=${STEP_RATIO:-1.2}
 MIN_ENCLAVE_SIZE=128 # enclave size in MB
 MAX_ENCLAVE_SIZE=128
 IO_ROUNDs=(1) # number of rounds encryption/decryption is performed, used to get breakdown
@@ -74,4 +75,4 @@ done
 done
 sed -i '/.*<Heap.*/c\  <HeapMaxSize>0x7a12000</HeapMaxSize>' ./Enclave/Enclave.config.xml
 
-mv *.out ../../benchmark_output
+mv *.out ../../benchmark_output/
