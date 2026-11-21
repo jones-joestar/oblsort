@@ -16,8 +16,8 @@ SGX_MODE=${SGX_MODE:-HW} # HW or SIM
 ALGOs=(KWAYBUTTERFLYOSORT BITONICSORT CABUCKETSORT KWAYBUTTERFLYOSHUFFLE ORSHUFFLE BITONICSHUFFLE CABUCKETSHUFFLE EXTMERGESORT)
 MIN_ELEMENT_SIZE=128 # element size in bytes
 MAX_ELEMENT_SIZE=128
-MIN_SIZE=${MIN_SIZE:-1000000} # number of elements
-MAX_SIZE=${MAX_SIZE:-100000000}
+MIN_SIZE=${MIN_SIZE:-10000} # number of elements
+MAX_SIZE=${MAX_SIZE:-13000000}
 STEP_RATIO=${STEP_RATIO:-1.2}
 MIN_ENCLAVE_SIZE=128 # MB
 MAX_ENCLAVE_SIZE=128
@@ -37,7 +37,7 @@ for io_round in "${IO_ROUNDS[@]}"; do
             Enclave/Enclave.config.xml > "$enclave_config"
 
         for (( element_size=MIN_ELEMENT_SIZE; element_size<=MAX_ELEMENT_SIZE; element_size=element_size*3/2 )); do
-            for algo in "${ALGOS[@]}"; do
+            for algo in "${ALGOs[@]}"; do
                 name="${algo}_${SGX_MODE}_${element_size}B_${MIN_SIZE}_${MAX_SIZE}_step${STEP_RATIO}_E${enclave_size}_IO${io_round}_DISK${DISK_IO}"
                 mkdir -- "$build_dir/$name"
                 printf 'Building %s (%s, %s-byte elements, %s MB enclave)\n' \
@@ -53,6 +53,11 @@ for io_round in "${IO_ROUNDS[@]}"; do
         done
     done
 done
+
+if ((${#builds[@]} == 0)); then
+    printf 'No algorithm builds were produced; check the algorithm list above.\n' >&2
+    exit 1
+fi
 
 for (( run=1; run<=6; ++run )); do
     run_label="run${run}"
