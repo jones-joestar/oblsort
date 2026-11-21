@@ -59,7 +59,7 @@ if ((${#builds[@]} == 0)); then
     exit 1
 fi
 
-for (( run=1; run<=6; ++run )); do
+for (( run=1; run<=1; ++run )); do
     run_label="run${run}"
     if (( run == 1 )); then
         run_label+=_warmup
