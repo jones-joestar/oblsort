@@ -16,7 +16,7 @@
 *.a
 *.lib
 *.exe
-*.out
+
 *.app
 *.bin
 *.elf
