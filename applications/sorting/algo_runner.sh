@@ -28,6 +28,9 @@ DISK_IO=0 # 0: memory backend, 1: disk backend
 build_dir=$(mktemp -d)
 trap 'rm -rf -- "$build_dir"' EXIT
 builds=()
+groups=()
+declare -A result_names
+declare -A seen_groups
 
 for io_round in "${IO_ROUNDS[@]}"; do
     for (( enclave_size=MIN_ENCLAVE_SIZE; enclave_size<=MAX_ENCLAVE_SIZE; enclave_size*=2 )); do
@@ -49,6 +52,12 @@ for io_round in "${IO_ROUNDS[@]}"; do
                     Enclave_Config_File="$enclave_config"
                 cp -- sort.elf enclave.signed.so "$build_dir/$name/"
                 builds+=("$name")
+                result_names[$name]="${algo}_${SGX_MODE}_${MIN_SIZE}_${MAX_SIZE}_step${STEP_RATIO}_E${enclave_size}_IO${io_round}_DISK${DISK_IO}"
+                group=${result_names[$name]}
+                if [[ ! ${seen_groups[$group]+set} ]]; then
+                    groups+=("$group")
+                    seen_groups[$group]=1
+                fi
             done
         done
     done
@@ -65,17 +74,42 @@ for (( run=1; run<=6; ++run )); do
         run_label+=_warmup
     fi
 
-    shuffled_builds=$(printf '%s\n' "${builds[@]}" | shuf)
-    while IFS= read -r name; do
-        result="$output_dir/${name}_${run_label}.out"
-        printf 'Run %d/6: writing %s\n' "$run" "$result" >&2
-        if [[ ${1:-} == 1 ]]; then
-            (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
-                < /dev/null | tee "$result.part"
-        else
-            (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
-                < /dev/null > "$result.part"
-        fi
-        mv -- "$result.part" "$result"
-    done <<< "$shuffled_builds"
+    for group in "${groups[@]}"; do
+        : > "$output_dir/${group}_${run_label}.out"
+    done
+
+    shuffled_groups=$(printf '%s\n' "${groups[@]}" | shuf)
+    while IFS= read -r group; do
+        for name in "${builds[@]}"; do
+            [[ ${result_names[$name]} == "$group" ]] || continue
+            result="$output_dir/${group}_${run_label}.out"
+            part="$build_dir/$name/result.part"
+            printf 'Run %d/6: %s -> %s\n' "$run" "$name" "$result" >&2
+            if [[ ${1:-} == 1 ]]; then
+                if (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
+                    < /dev/null | tee "$part"; then
+                    status=0
+                else
+                    pipeline_status=("${PIPESTATUS[@]}")
+                    if (( pipeline_status[1] != 0 )); then
+                        printf 'Could not write %s\n' "$part" >&2
+                        exit 1
+                    fi
+                    status=${pipeline_status[0]}
+                fi
+            else
+                if (cd -- "$build_dir/$name" && taskset -c "$CORE_ID" stdbuf -oL ./sort.elf) \
+                    < /dev/null > "$part"; then
+                    status=0
+                else
+                    status=$?
+                fi
+            fi
+            if (( status == 0 )); then
+                cat -- "$part" >> "$result"
+            else
+                printf 'Benchmark failed (exit %d): %s; continuing\n' "$status" "$name" >&2
+            fi
+        done
+    done <<< "$shuffled_groups"
 done
