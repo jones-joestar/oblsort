@@ -46,7 +46,7 @@ void ecall_sort_perf() {
           : ELEMENT_SIZE + 32;
   constexpr size_t CacheSize =
       ALGO != BITONICSHUFFLE && ALGO != UNOPTBITONICSORT
-          ? (uint64_t)(ENCLAVE_SIZE << 19) / CachePageSize
+          ? (uint64_t(ENCLAVE_SIZE) << 19) / CachePageSize
           : 1;
   using CachedVector = EM::ExtVector::Vector<SortElement, CachePageSize - 32,
                                              true, true, CacheSize>;
@@ -304,7 +304,7 @@ void mergesplit_tag_perf() {
       TaggedT<SortElement> defaultVal;
       defaultVal.setDummy();
       size_t bucketCount =
-          (ENCLAVE_SIZE << 19) / sizeof(TaggedT<SortElement>) / Z;
+          (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(TaggedT<SortElement>) / Z;
       const uint64_t N = way * Z * (bucketCount / way);
       std::vector<TaggedT<SortElement>> v(N, defaultVal);
       ocall_measure_time(&start);
@@ -340,7 +340,7 @@ void mergesplit_pivot_perf() {
       Block<SortElement> defaultVal;
       defaultVal.setDummy();
       size_t bucketCount =
-          (ENCLAVE_SIZE << 19) / sizeof(Block<SortElement>) / Z;
+          (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(Block<SortElement>) / Z;
       const uint64_t N = way * Z * (bucketCount / way);
       std::vector<Block<SortElement>> v(N, defaultVal);
       ocall_measure_time(&start);
@@ -485,7 +485,7 @@ void ecall_bitonic_perf() {
     TaggedT<SortElement> defaultVal;
     defaultVal.setDummy();
     size_t bucketCount =
-        (ENCLAVE_SIZE << 19) / sizeof(TaggedT<SortElement>) / Z;
+        (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(TaggedT<SortElement>) / Z;
     const uint64_t N = Z * bucketCount;
     std::vector<TaggedT<SortElement>> v(N, defaultVal);
     ocall_measure_time(&start);
