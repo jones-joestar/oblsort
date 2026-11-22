@@ -26,7 +26,8 @@ enum SortMethod {
   KWAYBUTTERFLYOSHUFFLE,          // flex-way butterfly o-shuffle
   UNOPTBITONICSORT,               // unoptimized bitonic sort
   EXTMERGESORT,                   // external memory merge sort
-  OTHER                           // other algorithms
+  OTHER,                          // other algorithms
+  STDSORT                         // std::sort
 };
 
 enum PartitionMethod {
