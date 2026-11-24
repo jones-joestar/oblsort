@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <memory>
 #include <random>
+#include <vector>
 
 #include "../Enclave.h"
 #include "Enclave_t.h"
@@ -43,7 +46,7 @@ void ecall_sort_perf() {
           : ELEMENT_SIZE + 32;
   constexpr size_t CacheSize =
       ALGO != BITONICSHUFFLE && ALGO != UNOPTBITONICSORT
-          ? (uint64_t)(ENCLAVE_SIZE << 19) / CachePageSize
+          ? (uint64_t(ENCLAVE_SIZE) << 19) / CachePageSize
           : 1;
   using CachedVector = EM::ExtVector::Vector<SortElement, CachePageSize - 32,
                                              true, true, CacheSize>;
@@ -52,46 +55,61 @@ void ecall_sort_perf() {
   for (double factor = 1; factor * MIN_SIZE <= MAX_SIZE; factor *= STEP_RATIO) {
     uint64_t size = (uint64_t)(factor * MIN_SIZE);
     ocall_log_sort_start(SORT_ALGO_NAME(ALGO), size, ELEMENT_SIZE);
-    if (EM::Backend::g_DefaultBackend) {
-      delete EM::Backend::g_DefaultBackend;
+    std::vector<SortElement> vStd;
+    std::unique_ptr<TestVector> vExt;
+    std::unique_ptr<TestVector::Writer> writer;
+    if constexpr (ALGO == STDSORT) {
+      vStd.resize(size);
+    } else {
+      if (EM::Backend::g_DefaultBackend) {
+        delete EM::Backend::g_DefaultBackend;
+      }
+      size_t BackendSize =
+          ((ALGO == CABUCKETSORT || ALGO == CABUCKETSHUFFLE) ? 16 : 4) *
+          sizeof(TaggedT<SortElement>) * size;
+      EM::Backend::g_DefaultBackend =
+          new EM::Backend::MemServerBackend(BackendSize);
+      vExt = std::make_unique<TestVector>(size);
+      writer = std::make_unique<TestVector::Writer>(vExt->begin(), vExt->end());
     }
-    size_t BackendSize =
-        ((ALGO == CABUCKETSORT || ALGO == CABUCKETSHUFFLE) ? 16 : 4) *
-        sizeof(TaggedT<SortElement>) * size;
-    EM::Backend::g_DefaultBackend =
-        new EM::Backend::MemServerBackend(BackendSize);
-    TestVector vExt(size);
-    TestVector::Writer writer(vExt.begin(), vExt.end());
     // Recreate the same input for this size without seeding the sort's RNG.
     std::mt19937_64 input_keys(size);
     for (uint64_t i = 0; i < size; ++i) {
       SortElement element = SortElement();
       element.key = input_keys();
-      writer.write(element);
+      if constexpr (ALGO == STDSORT) {
+        vStd[i] = element;
+      } else {
+        writer->write(element);
+      }
     }
-    writer.flush();
+    if constexpr (ALGO != STDSORT) {
+      writer->flush();
+    }
     uint64_t currTime;
     ocall_measure_time(&currTime);
     if constexpr (ALGO == KWAYBUTTERFLYOSORT) {
-      KWayButterflySort(vExt);
+      KWayButterflySort(*vExt);
     } else if constexpr (ALGO == KWAYBUTTERFLYOSHUFFLE) {
-      KWayButterflyOShuffle(vExt);
+      KWayButterflyOShuffle(*vExt);
     } else if constexpr (ALGO == CABUCKETSORT) {
-      CABucketSort(vExt);
+      CABucketSort(*vExt);
     } else if constexpr (ALGO == BITONICSORT || ALGO == UNOPTBITONICSORT) {
-      BitonicSort(vExt);
+      BitonicSort(*vExt);
     } else if constexpr (ALGO == ORSHUFFLE) {
-      OrShuffle(vExt);
+      OrShuffle(*vExt);
     } else if constexpr (ALGO == CABUCKETSHUFFLE) {
-      CABucketShuffle(vExt);
+      CABucketShuffle(*vExt);
     } else if constexpr (ALGO == BITONICSHUFFLE) {
-      BitonicShuffle(vExt);
+      BitonicShuffle(*vExt);
     } else if constexpr (ALGO == KWAYDISTRIBUTIONOSORT) {
-      KWayDistriSort(vExt);
+      KWayDistriSort(*vExt);
     } else if constexpr (ALGO == KWAYDISTRIBUTIONOSORTSHUFFLED) {
-      KWayDistriSortShuffled(vExt);
+      KWayDistriSortShuffled(*vExt);
     } else if constexpr (ALGO == EXTMERGESORT) {
-      ExtMergeSort(vExt);
+      ExtMergeSort(*vExt);
+    } else if constexpr (ALGO == STDSORT) {
+      std::sort(vStd.begin(), vStd.end());
     }
 
     uint64_t currTime2;
@@ -286,7 +304,7 @@ void mergesplit_tag_perf() {
       TaggedT<SortElement> defaultVal;
       defaultVal.setDummy();
       size_t bucketCount =
-          (ENCLAVE_SIZE << 19) / sizeof(TaggedT<SortElement>) / Z;
+          (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(TaggedT<SortElement>) / Z;
       const uint64_t N = way * Z * (bucketCount / way);
       std::vector<TaggedT<SortElement>> v(N, defaultVal);
       ocall_measure_time(&start);
@@ -322,7 +340,7 @@ void mergesplit_pivot_perf() {
       Block<SortElement> defaultVal;
       defaultVal.setDummy();
       size_t bucketCount =
-          (ENCLAVE_SIZE << 19) / sizeof(Block<SortElement>) / Z;
+          (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(Block<SortElement>) / Z;
       const uint64_t N = way * Z * (bucketCount / way);
       std::vector<Block<SortElement>> v(N, defaultVal);
       ocall_measure_time(&start);
@@ -467,7 +485,7 @@ void ecall_bitonic_perf() {
     TaggedT<SortElement> defaultVal;
     defaultVal.setDummy();
     size_t bucketCount =
-        (ENCLAVE_SIZE << 19) / sizeof(TaggedT<SortElement>) / Z;
+        (uint64_t(ENCLAVE_SIZE) << 19) / sizeof(TaggedT<SortElement>) / Z;
     const uint64_t N = Z * bucketCount;
     std::vector<TaggedT<SortElement>> v(N, defaultVal);
     ocall_measure_time(&start);
