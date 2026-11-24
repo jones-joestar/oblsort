@@ -24,6 +24,13 @@ class benchmark:
     def get_time(self):
         return np.median(self.time, axis=0)
 
+    def get_time_min(self):
+        return np.min(self.time, axis=0)
+
+    def get_time_max(self):
+        return np.max(self.time, axis=0)
+
+
 def plot(data, args):
     for benchmark in data:
         if args.sort and "SHUFFLE" in benchmark.algo_name:
@@ -32,7 +39,14 @@ def plot(data, args):
         if args.shuffle and "SORT" in benchmark.algo_name:
             continue
 
-        plt.plot(benchmark.get_element_size() if args.e else benchmark.get_input_size() , benchmark.get_time(), marker="o", markersize=3, label=benchmark.algo_name)
+        x = benchmark.get_element_size() if args.e else benchmark.get_input_size()
+        min = benchmark.get_time_min()
+        max = benchmark.get_time_max()
+        y = benchmark.get_time()
+
+        # plot median with shaded spread
+        line, = plt.plot(x, y, marker="o", markersize=3, label=benchmark.algo_name)
+        plt.fill_between(x, min, max, color=line.get_color(), alpha=0.2, linewidth=0)
 
     plt.xlabel("Element size (bytes)" if args.e else "Number of elements")
     plt.ylabel("Running time (seconds)")
