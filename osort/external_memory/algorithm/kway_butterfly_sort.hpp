@@ -3,6 +3,7 @@
 #include "external_memory/noncachedvector.hpp"
 #include "param_select.hpp"
 #include "sort_building_blocks.hpp"
+#include <omp.h>
 
 /// This file implements the flex-way butterfly osort and oshuffle algorithms.
 
@@ -87,6 +88,15 @@ class ButterflySorter {
         mergeSortFirstLayer(
             task == KWAYBUTTERFLYOSORT ? inputEndIt - inputBeginIt : 0),
         numElementFit(_heapSize / sizeof(WrappedT)) {
+
+    omp_set_dynamic(0);
+    omp_set_num_threads(4);
+
+    #pragma omp parallel for
+    for (int i = 0; i < 10; i++) {
+      printf("%d, thread %d of %d\n", i, omp_get_thread_num(), omp_get_num_threads());
+    }
+
     size_t size = inputEndIt - inputBeginIt;
     batch = new WrappedT[numElementFit];
     KWayParams = bestKWayButterflyParams(size, numElementFit, sizeof(T));
